@@ -9,6 +9,38 @@ import { ConsensusRuler } from "../components/ConsensusRuler";
 
 const DEFAULT_SERVERS = ["time.cloudflare.com", "time.google.com", "pool.ntp.org"];
 
+const RESULT_COLUMNS: { label: string; hint: string }[] = [
+  { label: "Server", hint: "The NTP server you tested (host or host:port)." },
+  {
+    label: "Offset",
+    hint: "How far your local clock is from this server's clock. Positive means your clock is behind the server; negative means it's ahead.",
+  },
+  {
+    label: "RTT",
+    hint: "Round-trip network delay of the query. It gauges quality, not the clock — lower and steadier delays give a more trustworthy offset.",
+  },
+  {
+    label: "Jitter",
+    hint: "Spread (standard deviation) of the offset across this run's samples. Lower means more stable, more reliable readings.",
+  },
+  {
+    label: "Stratum",
+    hint: "Distance from a reference clock, in hops. 1 = directly attached to a reference (GPS/atomic); higher = further from the source.",
+  },
+  {
+    label: "Ref ID",
+    hint: "What this server syncs to: a source code like .GPS. or .GOOG. for stratum 1, or the upstream server's IP for stratum 2+.",
+  },
+  {
+    label: "Leap",
+    hint: "Leap-second indicator: none normally; +1s/-1s if one is scheduled this month; unsync if the server says its own clock isn't synced.",
+  },
+  {
+    label: "Resolved",
+    hint: "The actual IP address that answered — useful for pools like pool.ntp.org that rotate across many members.",
+  },
+];
+
 export function QuickTest() {
   const toast = useToast();
   const [servers, setServers] = useState<string[]>(DEFAULT_SERVERS);
@@ -123,7 +155,7 @@ export function QuickTest() {
           <div>
             <label className="text-xs font-medium uppercase tracking-wide text-muted">Samples per server</label>
             <div className="mt-2 flex overflow-hidden rounded-lg border border-border">
-              {[1, 2, 4, 6, 8, 10].map((n) => (
+              {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
                   onClick={() => setSamples(n)}
@@ -223,14 +255,17 @@ function ResultsTable({ result }: { result: TestResponse }) {
       <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-            <th className="px-4 py-2 font-medium">Server</th>
-            <th className="px-4 py-2 font-medium">Offset</th>
-            <th className="px-4 py-2 font-medium">RTT</th>
-            <th className="px-4 py-2 font-medium">Jitter</th>
-            <th className="px-4 py-2 font-medium">Stratum</th>
-            <th className="px-4 py-2 font-medium">Ref ID</th>
-            <th className="px-4 py-2 font-medium">Leap</th>
-            <th className="px-4 py-2 font-medium">Resolved</th>
+            {RESULT_COLUMNS.map((c) => (
+              <th key={c.label} className="px-4 py-2 font-medium">
+                <span
+                  title={c.hint}
+                  aria-label={`${c.label}: ${c.hint}`}
+                  className="cursor-help underline decoration-dotted decoration-muted/50 underline-offset-4"
+                >
+                  {c.label}
+                </span>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
