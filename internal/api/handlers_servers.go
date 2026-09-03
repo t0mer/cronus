@@ -86,6 +86,8 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	// Capture the prior address so a rename doesn't orphan its metric series.
+	prev, _ := a.deps.Store.GetServer(r.Context(), id)
 	updated, err := a.deps.Store.UpdateServer(r.Context(), store.Server{
 		ID:      id,
 		Address: addr,
@@ -100,9 +102,13 @@ func (a *API) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update server")
 		return
 	}
-	// Forget metrics series if the address changed or the server was disabled.
-	if a.deps.Metrics != nil && !enabled {
-		a.deps.Metrics.ForgetServer(id, addr)
+	// Drop the old metric series when the server is disabled or renamed; the
+	// series is keyed by {id, address}, so a rename would otherwise leak the
+	// stale label set until the process restarts.
+	if a.deps.Metrics != nil && prev.Address != "" {
+		if !enabled || prev.Address != addr {
+			a.deps.Metrics.ForgetServer(id, prev.Address)
+		}
 	}
 	writeJSON(w, http.StatusOK, updated)
 }
