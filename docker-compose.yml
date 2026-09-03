@@ -1,0 +1,29 @@
+services:
+  cronus:
+    image: techblog/cronus:latest
+    container_name: cronus
+    ports:
+      - "8080:8080"
+    volumes:
+      # Named volume: inherits the image's /data ownership (uid 65534). Holds
+      # the SQLite database (servers + measurement history). Persist it.
+      - cronus-data:/data
+    environment:
+      LOG_LEVEL: info
+      CRONUS_MONITOR_INTERVAL: 5m
+      CRONUS_COMPARE_OUTLIER_THRESHOLD: 100ms
+    restart: unless-stopped
+
+  # Cronus pairs well with a local NTP server (e.g. cturra/ntp or a chrony
+  # container) so you can validate your LAN time source against public servers
+  # like time.cloudflare.com. Uncomment to run one alongside:
+  #
+  # chrony:
+  #   image: cturra/ntp:latest
+  #   container_name: chrony
+  #   ports:
+  #     - "123:123/udp"
+  #   restart: unless-stopped
+
+volumes:
+  cronus-data:
