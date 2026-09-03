@@ -1,0 +1,105 @@
+version: 2
+project_name: cronus
+
+before:
+  hooks:
+    - go mod tidy
+    - bash -c "cd web && npm ci && npm run build"
+
+builds:
+  - id: cronus
+    main: ./cmd/cronus
+    binary: cronus
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/t0mer/cronus/internal/version.Version={{ .Version }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64, arm, "386"]
+    goarm: ["6", "7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: "386"
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+dockers:
+  - image_templates:
+      - "techblog/cronus:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/t0mer/cronus"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+  - image_templates:
+      - "techblog/cronus:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/t0mer/cronus"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+  - image_templates:
+      - "techblog/cronus:{{ .Version }}-armv7"
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    goarch: arm
+    goarm: "7"
+    build_flag_templates:
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.source=https://github.com/t0mer/cronus"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+
+docker_manifests:
+  - name_template: "techblog/cronus:{{ .Version }}"
+    image_templates:
+      - "techblog/cronus:{{ .Version }}-amd64"
+      - "techblog/cronus:{{ .Version }}-arm64"
+      - "techblog/cronus:{{ .Version }}-armv7"
+  - name_template: "techblog/cronus:latest"
+    image_templates:
+      - "techblog/cronus:{{ .Version }}-amd64"
+      - "techblog/cronus:{{ .Version }}-arm64"
+      - "techblog/cronus:{{ .Version }}-armv7"
+
+release:
+  github:
+    owner: t0mer
+    name: cronus
+  draft: false
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
