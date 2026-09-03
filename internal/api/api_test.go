@@ -8,12 +8,26 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/t0mer/cronus/internal/metrics"
 	"github.com/t0mer/cronus/internal/ntp"
+	"github.com/t0mer/cronus/internal/settings"
 	"github.com/t0mer/cronus/internal/store"
 )
+
+type fakeSettings struct{ v settings.Values }
+
+func (f *fakeSettings) Get() settings.Values { return f.v }
+func (f *fakeSettings) Update(_ context.Context, v settings.Values) error {
+	if err := v.Validate(); err != nil {
+		return err
+	}
+	f.v = v
+	return nil
+}
 
 type fakeEngine struct {
 	results map[string]ntp.ServerResult
@@ -43,6 +57,8 @@ func newTestAPI(t *testing.T) (*API, *store.Store, *fakeEngine) {
 	a := New(Deps{
 		Store:            st,
 		Engine:           eng,
+		Settings:         &fakeSettings{v: settings.Values{MonitorInterval: 5 * time.Minute, Retention: 720 * time.Hour, OutlierThreshold: 100 * time.Millisecond}},
+		Metrics:          metrics.New(),
 		OutlierThreshold: 100 * time.Millisecond,
 		StartTime:        time.Now(),
 	})
@@ -268,6 +284,71 @@ func TestDrift(t *testing.T) {
 	}
 	if *d.DriftPPM < 0.9 || *d.DriftPPM > 1.1 {
 		t.Fatalf("drift = %v ppm, want ~1.0", *d.DriftPPM)
+	}
+}
+
+func TestSettingsGetAndPut(t *testing.T) {
+	a, _, _ := newTestAPI(t)
+
+	rec := do(t, a, "GET", "/api/v1/settings", nil)
+	if rec.Code != 200 {
+		t.Fatalf("get status = %d", rec.Code)
+	}
+	var got settingsBody
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.MonitorInterval != "5m0s" {
+		t.Fatalf("interval = %q, want 5m0s", got.MonitorInterval)
+	}
+
+	rec = do(t, a, "PUT", "/api/v1/settings", map[string]any{
+		"monitor_interval": "30s", "retention": "48h", "outlier_threshold": "50ms",
+	})
+	if rec.Code != 200 {
+		t.Fatalf("put status = %d body=%s", rec.Code, rec.Body)
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.MonitorInterval != "30s" || got.Retention != "48h0m0s" {
+		t.Fatalf("updated = %+v", got)
+	}
+}
+
+func TestSettingsPutRejectsInvalid(t *testing.T) {
+	a, _, _ := newTestAPI(t)
+	// interval below the 15s floor
+	rec := do(t, a, "PUT", "/api/v1/settings", map[string]any{
+		"monitor_interval": "1s", "retention": "48h", "outlier_threshold": "50ms",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	// unparseable duration
+	rec = do(t, a, "PUT", "/api/v1/settings", map[string]any{
+		"monitor_interval": "soon", "retention": "48h", "outlier_threshold": "50ms",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestUpdateServerRenameForgetsOldMetricSeries(t *testing.T) {
+	a, st, _ := newTestAPI(t)
+	ctx := context.Background()
+	srv, _ := st.CreateServer(ctx, store.Server{Address: "old.example", Enabled: true})
+	// Simulate a poll having recorded a series under the old address.
+	a.deps.Metrics.ObserveServer(srv.ID, ntp.ServerResult{Target: "old.example", Reachable: true})
+
+	rec := do(t, a, "PUT", "/api/v1/servers/"+srv.ID, map[string]any{
+		"address": "new.example", "enabled": true,
+	})
+	if rec.Code != 200 {
+		t.Fatalf("update status = %d body=%s", rec.Code, rec.Body)
+	}
+
+	// Scrape metrics; the old-address series must be gone.
+	mrec := httptest.NewRecorder()
+	a.Handler().ServeHTTP(mrec, httptest.NewRequest("GET", "/metrics", nil))
+	if strings.Contains(mrec.Body.String(), `server="old.example"`) {
+		t.Fatalf("stale metric series for old.example still present:\n%s", mrec.Body.String())
 	}
 }
 

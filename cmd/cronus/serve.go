@@ -18,6 +18,7 @@ import (
 	"github.com/t0mer/cronus/internal/metrics"
 	"github.com/t0mer/cronus/internal/notify"
 	"github.com/t0mer/cronus/internal/scheduler"
+	"github.com/t0mer/cronus/internal/settings"
 	"github.com/t0mer/cronus/internal/store"
 	"github.com/t0mer/cronus/internal/version"
 )
@@ -56,16 +57,26 @@ func runServe(cmd *cobra.Command, cfgFile string) error {
 	engine := buildEngine(cfg)
 	m := metrics.New()
 
+	settingsSvc, err := settings.New(context.Background(), st, settings.Values{
+		MonitorInterval:  cfg.Monitor.Interval,
+		Retention:        cfg.Monitor.Retention,
+		OutlierThreshold: cfg.Compare.OutlierThreshold,
+	})
+	if err != nil {
+		return err
+	}
+
 	sched := scheduler.New(st, engine, m, notify.Nop{}, scheduler.Config{
 		Interval:         cfg.Monitor.Interval,
 		Retention:        cfg.Monitor.Retention,
 		OutlierThreshold: cfg.Compare.OutlierThreshold,
-	}, log)
+	}, settingsSvc, log)
 
 	var schedRunning atomic.Bool
 	apiSrv := api.New(api.Deps{
 		Store:            st,
 		Engine:           engine,
+		Settings:         settingsSvc,
 		Metrics:          m,
 		OutlierThreshold: cfg.Compare.OutlierThreshold,
 		DefaultSamples:   cfg.NTP.Samples,

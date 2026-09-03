@@ -15,6 +15,7 @@ import (
 
 	"github.com/t0mer/cronus/internal/metrics"
 	"github.com/t0mer/cronus/internal/ntp"
+	"github.com/t0mer/cronus/internal/settings"
 	"github.com/t0mer/cronus/internal/store"
 )
 
@@ -34,10 +35,17 @@ type EngineAPI interface {
 	RunWithSamples(ctx context.Context, targets []string, samples int) []ntp.ServerResult
 }
 
+// SettingsAPI reads and updates runtime-editable settings.
+type SettingsAPI interface {
+	Get() settings.Values
+	Update(ctx context.Context, v settings.Values) error
+}
+
 // Deps are the dependencies of the API server.
 type Deps struct {
 	Store            StoreAPI
 	Engine           EngineAPI
+	Settings         SettingsAPI
 	Metrics          *metrics.Metrics
 	OutlierThreshold time.Duration
 	DefaultSamples   int
@@ -113,6 +121,11 @@ func (a *API) routes() {
 		})
 
 		r.Get("/status", a.handleStatus)
+
+		if a.deps.Settings != nil {
+			r.Get("/settings", a.handleGetSettings)
+			r.Put("/settings", a.handleUpdateSettings)
+		}
 	})
 
 	if a.deps.UI != nil {

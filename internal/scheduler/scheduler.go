@@ -35,7 +35,17 @@ type Observer interface {
 	Pruned(n int)
 }
 
-// Config configures the scheduler.
+// Provider supplies live-editable settings. *settings.Service satisfies it.
+// When nil, the scheduler falls back to the static Config values.
+type Provider interface {
+	Interval() time.Duration
+	Retention() time.Duration
+	OutlierThreshold() time.Duration
+}
+
+// Config configures the scheduler. When a Provider is supplied to New, its
+// Interval/Retention/OutlierThreshold values take precedence over these; the
+// static values remain the fallback.
 type Config struct {
 	Interval         time.Duration
 	Retention        time.Duration
@@ -49,16 +59,15 @@ type Scheduler struct {
 	engine   Querier
 	metrics  Observer
 	notifier notify.Notifier
+	provider Provider
 	cfg      Config
 	log      *slog.Logger
 	now      func() time.Time
 }
 
-// New builds a Scheduler, applying defaults and the monitoring-interval floor.
-func New(st Store, engine Querier, m Observer, notifier notify.Notifier, cfg Config, log *slog.Logger) *Scheduler {
-	if cfg.Interval < ntp.MinMonitorInterval {
-		cfg.Interval = ntp.MinMonitorInterval
-	}
+// New builds a Scheduler. If provider is non-nil, its values drive the poll
+// interval, retention, and outlier threshold live; otherwise cfg is used.
+func New(st Store, engine Querier, m Observer, notifier notify.Notifier, cfg Config, provider Provider, log *slog.Logger) *Scheduler {
 	if cfg.HousekeepEvery <= 0 {
 		cfg.HousekeepEvery = 24 * time.Hour
 	}
@@ -73,10 +82,37 @@ func New(st Store, engine Querier, m Observer, notifier notify.Notifier, cfg Con
 		engine:   engine,
 		metrics:  m,
 		notifier: notifier,
+		provider: provider,
 		cfg:      cfg,
 		log:      log,
 		now:      time.Now,
 	}
+}
+
+// interval returns the current poll interval, floored at the 15s citizen limit.
+func (s *Scheduler) interval() time.Duration {
+	d := s.cfg.Interval
+	if s.provider != nil {
+		d = s.provider.Interval()
+	}
+	if d < ntp.MinMonitorInterval {
+		d = ntp.MinMonitorInterval
+	}
+	return d
+}
+
+func (s *Scheduler) retention() time.Duration {
+	if s.provider != nil {
+		return s.provider.Retention()
+	}
+	return s.cfg.Retention
+}
+
+func (s *Scheduler) threshold() time.Duration {
+	if s.provider != nil {
+		return s.provider.OutlierThreshold()
+	}
+	return s.cfg.OutlierThreshold
 }
 
 // Run blocks, polling on the configured interval and running housekeeping on
@@ -86,9 +122,11 @@ func (s *Scheduler) Run(ctx context.Context) {
 	s.PollOnce(ctx)
 	s.Housekeep(ctx)
 
-	pollT := time.NewTicker(s.cfg.Interval)
+	// Timers (not tickers) so interval changes from the settings provider take
+	// effect on the next cycle.
+	pollT := time.NewTimer(s.interval())
 	defer pollT.Stop()
-	houseT := time.NewTicker(s.cfg.HousekeepEvery)
+	houseT := time.NewTimer(s.cfg.HousekeepEvery)
 	defer houseT.Stop()
 
 	for {
@@ -97,8 +135,10 @@ func (s *Scheduler) Run(ctx context.Context) {
 			return
 		case <-pollT.C:
 			s.PollOnce(ctx)
+			pollT.Reset(s.interval())
 		case <-houseT.C:
 			s.Housekeep(ctx)
+			houseT.Reset(s.cfg.HousekeepEvery)
 		}
 	}
 }
@@ -122,8 +162,8 @@ func (s *Scheduler) PollOnce(ctx context.Context) {
 	results := s.engine.Run(ctx, targets)
 
 	var outliers map[string]bool
-	if s.cfg.OutlierThreshold > 0 {
-		comp := ntp.BuildComparison(results, s.cfg.OutlierThreshold)
+	if th := s.threshold(); th > 0 {
+		comp := ntp.BuildComparison(results, th)
 		outliers = make(map[string]bool, len(comp.Outliers))
 		for _, o := range comp.Outliers {
 			outliers[o] = true
@@ -148,10 +188,11 @@ func (s *Scheduler) PollOnce(ctx context.Context) {
 
 // Housekeep prunes measurements older than the retention window.
 func (s *Scheduler) Housekeep(ctx context.Context) {
-	if s.cfg.Retention <= 0 {
+	retention := s.retention()
+	if retention <= 0 {
 		return
 	}
-	before := s.now().Add(-s.cfg.Retention)
+	before := s.now().Add(-retention)
 	n, err := s.store.PruneMeasurements(ctx, before)
 	if err != nil {
 		s.log.Error("scheduler: prune", "err", err)

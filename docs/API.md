@@ -171,6 +171,27 @@ Application status.
   "db": { "servers": 3, "measurements": 8640 }, "now": "..." }
 ```
 
+## `GET /api/v1/settings`
+
+Return the current runtime-editable settings (durations as strings):
+
+```json
+{ "monitor_interval": "5m0s", "retention": "720h0m0s", "outlier_threshold": "100ms" }
+```
+
+## `PUT /api/v1/settings`
+
+Update and persist the settings. Body: same shape as the GET response; all
+three fields are durations (Go format, e.g. `"30s"`, `"48h"`, `"50ms"`).
+Changes take effect live — the monitoring loop picks them up on the next cycle.
+
+- `monitor_interval` must be ≥ `15s`.
+- `retention` must be positive.
+- `outlier_threshold` must be ≥ 0.
+
+Response `200`: the updated settings. Errors: `400` (unparseable duration or
+out-of-range value).
+
 ## `GET /metrics`
 
 Prometheus exposition. Per-monitored-server gauges are labelled `{id, server}`:

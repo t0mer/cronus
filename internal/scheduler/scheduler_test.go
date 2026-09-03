@@ -99,7 +99,7 @@ func TestPollOnceStoresObservesAndNotifies(t *testing.T) {
 	}}
 	obs := newFakeObserver()
 	notif := &recordingNotifier{}
-	s := New(st, engine, obs, notif, Config{Interval: time.Minute, OutlierThreshold: 100 * time.Millisecond}, quietLogger())
+	s := New(st, engine, obs, notif, Config{Interval: time.Minute, OutlierThreshold: 100 * time.Millisecond}, nil, quietLogger())
 
 	s.PollOnce(ctx)
 
@@ -129,7 +129,7 @@ func TestPollOnceStoresObservesAndNotifies(t *testing.T) {
 func TestPollOnceNoServers(t *testing.T) {
 	st := newStore(t)
 	obs := newFakeObserver()
-	s := New(st, &fakeEngine{}, obs, notify.Nop{}, Config{Interval: time.Minute}, quietLogger())
+	s := New(st, &fakeEngine{}, obs, notify.Nop{}, Config{Interval: time.Minute}, nil, quietLogger())
 	s.PollOnce(context.Background())
 	if obs.polls != 1 || obs.lastCount != 0 {
 		t.Fatalf("expected a completed poll with 0 servers, got polls=%d count=%d", obs.polls, obs.lastCount)
@@ -145,7 +145,7 @@ func TestHousekeepPrunes(t *testing.T) {
 	_ = st.InsertMeasurement(ctx, store.Measurement{ServerID: srv.ID, TS: now.Add(-1 * time.Hour)})
 
 	obs := newFakeObserver()
-	s := New(st, &fakeEngine{}, obs, notify.Nop{}, Config{Interval: time.Minute, Retention: 24 * time.Hour}, quietLogger())
+	s := New(st, &fakeEngine{}, obs, notify.Nop{}, Config{Interval: time.Minute, Retention: 24 * time.Hour}, nil, quietLogger())
 	s.Housekeep(ctx)
 
 	if obs.pruned != 1 {
@@ -159,9 +159,32 @@ func TestHousekeepPrunes(t *testing.T) {
 
 func TestIntervalFlooredAt15s(t *testing.T) {
 	s := New(newStore(t), &fakeEngine{}, newFakeObserver(), notify.Nop{},
-		Config{Interval: time.Second}, quietLogger())
-	if s.cfg.Interval != ntp.MinMonitorInterval {
-		t.Fatalf("interval = %v, want floored to %v", s.cfg.Interval, ntp.MinMonitorInterval)
+		Config{Interval: time.Second}, nil, quietLogger())
+	if s.interval() != ntp.MinMonitorInterval {
+		t.Fatalf("interval() = %v, want floored to %v", s.interval(), ntp.MinMonitorInterval)
+	}
+}
+
+type fakeProvider struct {
+	interval, retention, threshold time.Duration
+}
+
+func (f fakeProvider) Interval() time.Duration         { return f.interval }
+func (f fakeProvider) Retention() time.Duration        { return f.retention }
+func (f fakeProvider) OutlierThreshold() time.Duration { return f.threshold }
+
+func TestProviderOverridesConfig(t *testing.T) {
+	p := fakeProvider{interval: 42 * time.Second, retention: 10 * time.Hour, threshold: 7 * time.Millisecond}
+	s := New(newStore(t), &fakeEngine{}, newFakeObserver(), notify.Nop{},
+		Config{Interval: time.Minute, Retention: time.Hour, OutlierThreshold: time.Second}, p, quietLogger())
+	if s.interval() != 42*time.Second {
+		t.Errorf("interval() = %v, want provider's 42s", s.interval())
+	}
+	if s.retention() != 10*time.Hour {
+		t.Errorf("retention() = %v, want provider's 10h", s.retention())
+	}
+	if s.threshold() != 7*time.Millisecond {
+		t.Errorf("threshold() = %v, want provider's 7ms", s.threshold())
 	}
 }
 
@@ -169,7 +192,7 @@ func TestRunStopsOnContextCancel(t *testing.T) {
 	st := newStore(t)
 	_, _ = st.CreateServer(context.Background(), store.Server{Address: "a", Enabled: true})
 	s := New(st, &fakeEngine{}, newFakeObserver(), notify.Nop{},
-		Config{Interval: time.Minute, Retention: time.Hour}, quietLogger())
+		Config{Interval: time.Minute, Retention: time.Hour}, nil, quietLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

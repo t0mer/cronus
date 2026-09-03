@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/t0mer/cronus/internal/ntp"
 )
@@ -47,6 +48,15 @@ func (a *API) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := a.deps.Engine.RunWithSamples(r.Context(), targets, req.Samples)
-	comp := ntp.BuildComparison(results, a.deps.OutlierThreshold)
+	comp := ntp.BuildComparison(results, a.outlierThreshold())
 	writeJSON(w, http.StatusOK, testResponse{Results: results, Comparison: comp})
+}
+
+// outlierThreshold returns the live threshold from settings when available,
+// falling back to the static configured value.
+func (a *API) outlierThreshold() time.Duration {
+	if a.deps.Settings != nil {
+		return a.deps.Settings.Get().OutlierThreshold
+	}
+	return a.deps.OutlierThreshold
 }
