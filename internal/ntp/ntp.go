@@ -210,6 +210,20 @@ func (e *Engine) Run(ctx context.Context, targets []string) []ServerResult {
 	return results
 }
 
+// RunWithSamples is like Run but overrides the samples-per-server count for
+// this call only. A samples value <= 0 uses the engine's configured default.
+func (e *Engine) RunWithSamples(ctx context.Context, targets []string, samples int) []ServerResult {
+	if samples <= 0 || samples == e.cfg.Samples {
+		return e.Run(ctx, targets)
+	}
+	if samples > 10 {
+		samples = 10
+	}
+	clone := *e
+	clone.cfg.Samples = samples
+	return clone.Run(ctx, targets)
+}
+
 func (e *Engine) runOne(ctx context.Context, target string) ServerResult {
 	res := ServerResult{Target: target}
 	host, port, err := SplitTarget(target)
