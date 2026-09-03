@@ -1,0 +1,37 @@
+# Cronus configuration example.
+#
+# Precedence (highest first): command-line flags > environment variables >
+# this file > built-in defaults. Environment variables use the CRONUS_ prefix
+# with nested keys joined by underscores, e.g. CRONUS_NTP_SAMPLES=4.
+#
+# Copy to config.yaml and pass with --config, or mount at a known path.
+
+# HTTP listen address.
+listen: ":8080"
+
+db:
+  # SQLite database path (pure-Go driver, CGO-free).
+  path: "/data/cronus.db"
+
+ntp:
+  # Samples per server per run (1-10).
+  samples: 4
+  # Per-query timeout.
+  timeout: "5s"
+  # Maximum servers queried in parallel.
+  workers: 8
+
+monitor:
+  # Scheduled poll interval for saved servers (hard floor: 15s).
+  interval: "5m"
+  # How long measurements are retained before housekeeping prunes them.
+  retention: "720h"
+
+compare:
+  # A server whose offset deviates from the median by more than this is
+  # flagged as a suspected falseticker.
+  outlier_threshold: "100ms"
+
+log:
+  # slog level: debug | info | warning | error.
+  level: "info"
