@@ -312,7 +312,7 @@ function buildOverlay(
   servers: Server[],
   history: Record<string, History>,
 ): { rows: ChartRow[]; series: ChartSeries[] } {
-  const enabled = servers.filter((s) => s.enabled && (history[s.id]?.points.length ?? 0) > 0);
+  const enabled = servers.filter((s) => s.enabled && (history[s.id]?.points?.length ?? 0) > 0);
   const series: ChartSeries[] = enabled.map((s, i) => ({
     key: s.id,
     label: s.label || s.address,
@@ -320,7 +320,7 @@ function buildOverlay(
   }));
   const byTs = new Map<string, ChartRow>();
   for (const s of enabled) {
-    for (const p of history[s.id].points) {
+    for (const p of history[s.id]?.points ?? []) {
       if (!p.reachable) continue;
       let row = byTs.get(p.ts);
       if (!row) {
