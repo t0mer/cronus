@@ -1,0 +1,109 @@
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Precision-timing-console palette. Light is the base; dark applies via the
+   prefers-color-scheme media query (pre-JS) and the explicit .dark/.light
+   classes set by the theme toggle (post-JS). */
+:root {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --border: #dde4ec;
+  --text: #10161d;
+  --muted: #5c6875;
+  --accent: #0b9c8a; /* signal teal */
+  --accent-2: #2f6bff; /* electric blue */
+  --warn: #c67a00; /* falseticker amber */
+  --danger: #d23b46; /* unreachable */
+  --ok: #0b9c8a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #0d1117;
+    --surface: #151b23;
+    --surface-2: #1c242e;
+    --border: #262f3a;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --accent: #35d0ba;
+    --accent-2: #4c8dff;
+    --warn: #f5a524;
+    --danger: #f2545b;
+    --ok: #35d0ba;
+  }
+}
+
+:root.dark {
+  --bg: #0d1117;
+  --surface: #151b23;
+  --surface-2: #1c242e;
+  --border: #262f3a;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #35d0ba;
+  --accent-2: #4c8dff;
+  --warn: #f5a524;
+  --danger: #f2545b;
+  --ok: #35d0ba;
+}
+
+:root.light {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --border: #dde4ec;
+  --text: #10161d;
+  --muted: #5c6875;
+  --accent: #0b9c8a;
+  --accent-2: #2f6bff;
+  --warn: #c67a00;
+  --danger: #d23b46;
+  --ok: #0b9c8a;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter Variable", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv05", "ss01";
+  }
+  .tnum {
+    font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+@layer utilities {
+  .grid-ticks {
+    background-image: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--border) 60%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 12.5% 100%;
+  }
+}
+
+/* Respect reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
