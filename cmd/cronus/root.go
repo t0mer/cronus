@@ -23,6 +23,10 @@ func newRootCmd() *cobra.Command {
 		Short:         "NTP server tester and comparator",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// With no subcommand, run the server (serve is the default, per spec).
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runServe(cmd, cfgFile)
+		},
 	}
 
 	pf := root.PersistentFlags()
@@ -33,6 +37,7 @@ func newRootCmd() *cobra.Command {
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newTestCmd(&cfgFile))
+	root.AddCommand(newServeCmd(&cfgFile))
 	return root
 }
 
