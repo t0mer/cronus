@@ -9,6 +9,7 @@ import (
 
 	"github.com/t0mer/cronus/internal/config"
 	"github.com/t0mer/cronus/internal/ntp"
+	"github.com/t0mer/cronus/internal/version"
 )
 
 // sampleSpacing is the delay Cronus leaves between successive samples of a
@@ -21,6 +22,7 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "cronus",
 		Short:         "NTP server tester and comparator",
+		Version:       version.String(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		// With no subcommand, run the server (serve is the default, per spec).
@@ -38,6 +40,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newTestCmd(&cfgFile))
 	root.AddCommand(newServeCmd(&cfgFile))
+	root.AddCommand(newHealthcheckCmd())
 	return root
 }
 
