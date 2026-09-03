@@ -248,6 +248,29 @@ func TestMeasurementsAndDownsample(t *testing.T) {
 	}
 }
 
+func TestMeasurementsEmptyReturnsArrayNotNull(t *testing.T) {
+	a, st, _ := newTestAPI(t)
+	// A server with no measurements yet — exactly the state right after adding
+	// one in the Monitoring UI.
+	srv, _ := st.CreateServer(context.Background(), store.Server{Address: "a", Enabled: true})
+
+	// The Monitoring page requests with a step, which goes through downsampling.
+	rec := do(t, a, "GET", "/api/v1/servers/"+srv.ID+"/measurements?step=5m", nil)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `"points":null`) {
+		t.Fatalf("points must be an empty array, not null: %s", rec.Body.String())
+	}
+	var m measurementsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Points == nil {
+		t.Fatal("Points decoded to nil; the API should always return an array")
+	}
+}
+
 func TestMeasurementsServerNotFound(t *testing.T) {
 	a, _, _ := newTestAPI(t)
 	rec := do(t, a, "GET", "/api/v1/servers/nope/measurements", nil)

@@ -74,6 +74,11 @@ func (a *API) handleMeasurements(w http.ResponseWriter, r *http.Request) {
 			points[i] = toPoint(m)
 		}
 	}
+	// Always return an array, never null — clients iterate this field, and a
+	// null crashes the monitoring overlay for a server with no data yet.
+	if points == nil {
+		points = []point{}
+	}
 
 	resp := measurementsResponse{ServerID: id, Count: len(points), Points: points}
 	if !from.IsZero() {
