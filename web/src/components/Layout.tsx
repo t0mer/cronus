@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Activity, Gauge, Radar, Settings as SettingsIcon, Moon, Sun } from "lucide-react";
@@ -6,6 +6,7 @@ import { api, type Status } from "../lib/api";
 import { useTheme } from "../lib/theme";
 import { fmtUptime } from "../lib/format";
 import { Dot } from "./ui";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const tabs = [
   { to: "/", label: "Quick Test", icon: Gauge, end: true },
@@ -16,6 +17,7 @@ const tabs = [
 export function Layout() {
   const { isDark, toggle } = useTheme();
   const [status, setStatus] = useState<Status | null>(null);
+  const location = useLocation();
 
   useEffect(() => {
     let alive = true;
@@ -94,7 +96,10 @@ export function Layout() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <Outlet />
+        {/* Keyed by path so navigating to another tab resets a caught error. */}
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       <footer className="mx-auto max-w-6xl px-4 py-8 text-xs text-muted">
